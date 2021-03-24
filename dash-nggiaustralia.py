@@ -10,43 +10,26 @@ import os
 
 
 import sys
-sys.path.append(".")
+# sys.path.append(".")
 
 from nggiaustralia import emissions
 
-data=emissions.load_emissions_data()
+my_emissions=emissions()
+data=my_emissions.load_emissions_data()
 
 #%%
-# Creating long and wide data
-data_long=pd.melt(data,id_vars="Quarter")
-data_wide=data.set_index("Quarter")
+# Creating long data
+data_long=pd.melt(data.drop("Total (excluding LULUCF)",axis=1),id_vars="Quarter")
 
 # Create rolling data
-data_yearly_rolling=emissions.create_rolling_data(data)
+data_yearly_rolling=my_emissions.create_rolling_data(data)
 
-#%%
 # Create 1.5C budget data
-data_15C=emissions.create_carbon_budget_data(data)
-
-#%%
-data_budget_2013=data[data["Quarter"]>=pd.to_datetime('2013-01-01')]
-data_budget_2013['Cumulative emissions']=data_budget_2013["Total (excluding LULUCF)"].cumsum()
-
-data_breakdown=data.iloc[:,:-3]
-data_breakdown_melt=pd.melt(data_breakdown,id_vars="Quarter")
-
-# data_yearly_breakdown=data_yearly_rolling.iloc[:,:-3]
-# data_yearly_breakdown_melt=pd.melt(data_yearly_breakdown,id_vars="Quarter")
-
-#%%
-
-data_15C=emissions.create_linear_reduction_data(data,100)
-
-data_15C_breakdown=data_15C.iloc[:,:-3]
-data_15C_breakdown_melt=pd.melt(data_15C_breakdown,id_vars="Quarter")
-
-data_15C['Cumulative emissions']=emissions.create_cumulative_data(data,"Total (excluding LULUCF)")
-
+data_budget=my_emissions.create_carbon_budget_data(data.loc[:,['Quarter',"Total (excluding LULUCF)"]],
+                                                   target_type="1.5C",
+                                                   # target_type="custom",
+                                                   # target_budget=20000
+                                                   )
 
 #%%
 
@@ -66,70 +49,70 @@ from dash.dependencies import Input, Output
 #                        y=["National Inventory Total","Total (excluding LULUCF)"],
 #                        )
 # fig_line_total=px.area(data_yearly_breakdown_melt,x="Quarter",y='value',color='variable')
-fig_line_total=px.area(data_15C_breakdown_melt,x="Quarter",y='value',color='variable')
+fig_line_total=px.area(data_long,x="Quarter",y='value',color='variable')
 
 # fig_line_total.update_traces(mode='lines+markers')
-fig_line_total.update_layout(title="Rolling average yearly emissions, carryover credits comparison",
+fig_line_total.update_layout(title="Historical carbon emissions, Australia",
                              xaxis_title="Year",
                              yaxis_title="Emissions (MtCO<sub>2</sub>-e)"
                              )
 
 
-fig_line_breakdown = px.line(data_yearly_breakdown_melt, x="Quarter", y="value", color="variable",
-              hover_name="variable")
-fig_line_breakdown.update_traces(mode='lines+markers')
+# fig_line_breakdown = px.line(data_yearly_breakdown_melt, x="Quarter", y="value", color="variable",
+#               hover_name="variable")
+# fig_line_breakdown.update_traces(mode='lines+markers')
 
 
-data_15C_plot=data_15C.loc[:,['Quarter','Cumulative emissions']]
-data_15C_plot=data_15C_plot.set_index('Quarter')         
+# data_15C_plot=data_15C.loc[:,['Quarter','Cumulative emissions']]
+# data_15C_plot=data_15C_plot.set_index('Quarter')         
                            
 # fig_line_carbon_budget=px.line(data_15C,
 #                        x="Quarter",
 #                        y=["Cumulative emissions"],
 #                        )
 
-fig_line_carbon_budget=px.line(data_15C_plot)
+fig_line_carbon_budget=px.line(data_budget, x="Quarter",y="Cumulative emissions")
 
-
-fig_line_carbon_budget.add_hline(y=100,
-                                 line_dash="dot")
-# fig_line_carbon_budget.add_hline(y=emissions.australia_emissions_total_2050_15C,
-#                                   # line_dash="dash",
-#               # annotation_text="1.5C Carbon budget", 
-              
-#               )
-
-# # fig_line_carbon_budget.update_traces(mode='lines+markers')
-# fig_line_carbon_budget.add_hline(y=emissions.australia_emissions_total_2050_15C,
-#                                   # line_dash="dash",
-#               # annotation_text="1.5C Carbon budget", 
-              
-#               )
-# fig_line_carbon_budget.add_hline(y=emissions.australia_emissions_total_2050_2C,
-#                                   # line_dash="dash",
-#               # annotation_text="2C Carbon budget", 
-#               )
- 
+#Problem with hlines and vlines
+# fig_line_carbon_budget.add_hline(y=100,
+#                                   line_dash="dot")
+fig_line_carbon_budget.add_hline(y=my_emissions.carbon_budget_15C,
+                                   line_dash="dash",
+               annotation_text="1.5C Carbon Budget", 
+              )
+fig_line_carbon_budget.add_hline(y=my_emissions.carbon_budget_2C,
+                                   line_dash="dash",
+               annotation_text="2C Carbon Budget", 
+              )
+# ,style={'display': 'inline-block'#,'width': '49%'}
 app=dash.Dash(__name__)
 app.layout = html.Div([
-    html.Div([
-    html.Div([
-        dcc.Graph(id="graph-line",figure=fig_line_total,
-                  hoverData={'points': [{'x':str(data.Quarter.max())}]},                  
-             )],
-        style={'display': 'inline-block','width': '49%'}
-        ),
-    
-    html.Div([
-        dcc.Graph(id="graph-pie",#figure=fig_pie
-                  ),
-        dcc.Graph(id="carbon-budget",
-                  figure=fig_line_carbon_budget)
-    ],style={'display': 'inline-block','width': '49%'}
-        )
-    ]),
-
-])
+    html.Div(
+        [
+            html.Div(
+                [dcc.Graph(id="graph-line",figure=fig_line_total,
+                          hoverData={'points': [{'x':str(data.Quarter.max())}]})],
+                style={'display': 'inline-block'}, 
+        
+            ),
+            html.Div(
+                [dcc.Graph(id="graph-pie")],
+                style={'display': 'inline-block'}, 
+            ),
+        ],
+        # style={'display': 'inline-block'}, 
+        # className="row flex-display",
+    ),        
+    html.Div(
+        [
+            html.Div(
+                [dcc.Graph(id="carbon-budget",figure=fig_line_carbon_budget)]
+                ),
+        ],#style={'display': 'inline-block','width': '49%'}
+    ),
+    ],
+    # style={"display": "flex", "flex-direction": "column"}
+)
 
 @app.callback(
     Output("graph-pie",'figure'),
@@ -138,9 +121,11 @@ app.layout = html.Div([
     )
 def update_pie_chart(hoverData):
     quarter=hoverData['points'][0]['x']
-    
-    dff=data_yearly_breakdown_melt[data_yearly_breakdown_melt["Quarter"]==pd.to_datetime(quarter)]
-    fig = px.pie(dff,values="value",names="variable",
+    dff=data.drop("Total (excluding LULUCF)",axis=1)
+    dff=pd.melt(dff[dff.Quarter==quarter],id_vars="Quarter")
+    dff=dff.round(1)
+    fig = px.pie(dff,
+                  values="value",names="variable",
                  title="Sectoral emissions of {}".format(quarter))
     fig.update_traces(textposition='inside', textinfo='percent+value')
     return fig
@@ -158,4 +143,4 @@ def update_pie_chart(hoverData):
     
     
 if __name__ == '__main__':
-    app.run_server()#debug=True,use_reloader=False)
+    app.run_server(debug=True)
