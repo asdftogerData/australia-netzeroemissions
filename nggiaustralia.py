@@ -11,14 +11,26 @@ import os
 import datetime
 import math
 from dateutil.relativedelta import relativedelta
-
+import numpy as np
 
 class emissions:
     '''
-    Constants: The total carbon budget from 2013-2050 for 1.5C and 2C.
+    The global carbon budget from 2013-2050 for both 1.5C and 2C have been calculated.
+    1.5C: 800GtCO2
+    2C: 1041GtCO2
+    
+    Sources used.
+    Meinshausen, M., Robiou du Pont, Y. and Talberg, A. (2018) Greenhouse Gas Emissions Budgets for Victoria.
+    AUSTRALIA’S PARIS AGREEMENT PATHWAYS: UPDATING THE CLIMATE CHANGE AUTHORITY’S 2014 EMISSIONS REDUCTION TARGETS, Jan 2021
+    
+    Mt units used throughout calculations.
     '''
-    carbon_budget_15C=7760
-    carbon_budget_2C=10400
+    global_budget_2013to2050_15C=800000
+    global_budget_2013to2050_2C=1072165
+    
+    # carbon_budget_15C=7760
+    # carbon_budget_2C=10400
+    emissions_yearly_2005=535.27
     XLS_NAME="nggi-quarterly-update-september-2020-data-sources.xlsx"
     DL_NAME="https://www.industry.gov.au/sites/default/files/2021-02/nggi-quarterly-update-september-2020-data-sources.xlsx"
     SHEET_NAME="Data Table 1A"
@@ -84,48 +96,96 @@ class emissions:
         return data
     
     """
-    Create a carbon budget dataset.
+    Create a carbon budget dataset, from preset temperatures. 
+    I could probably just use reduction target and use known reduction targets for temperatures but anyway.
+    
     """
-    def create_carbon_budget_data(self,
-                                  data, 
-                                starting_date=pd.to_datetime('2013-01-01'),
-                                target_budget=0,
-                                target_type="1.5C",
-                                      ):
-        data_starting=data[data["Quarter"]>=starting_date]
+    def create_carbon_budget_data_from_temp(
+        self,
+        data, 
+        target_type="1.5C",
+        share_perc=0.97,
+        starting_date=pd.to_datetime('2013-01-01'),
+        ):
+        data_starting=data.loc[:,['Quarter',"Total (excluding LULUCF)"]]
+        data_starting=data_starting[data_starting["Quarter"]>=starting_date]
+        cumulative_offset=data_starting["Total (excluding LULUCF)"].iloc[:-1].sum() 
         #c        
+        # if(target_type=="1.5C"):
+        #     target_budget=self.carbon_budget_15C
+        # elif(target_type=="2C"):
+        #     target_budget=self.carbon_budget_2C
         if(target_type=="1.5C"):
-            target_budget=self.carbon_budget_15C
+            target_budget=self.global_budget_2013to2050_15C*share_perc/100
         elif(target_type=="2C"):
-            target_budget=self.carbon_budget_2C
-        elif(target_type=="custom"):
-            pass
+            target_budget=self.global_budget_2013to2050_2C*share_perc/100
             
-        carbon_budget=target_budget-data_starting["Total (excluding LULUCF)"].sum()
+        carbon_budget=target_budget-cumulative_offset
         #y0
         emissions_start=data_starting["Total (excluding LULUCF)"].iloc[-1]
         #n=2c/y0 for linear reduction
         num_quarters=math.floor(2*carbon_budget/emissions_start)
         
-        return self.create_LRdata(data_starting,num_quarters)
-    
+        return self.create_LRdata(data_starting,num_quarters,
+                                  cumulative_offset=cumulative_offset,
+                                  )
+    """
+    Create a carbon budget from reduction targets
+    """
+    def create_carbon_budget_data_from_reduction_target(
+            self,
+            data,
+            starting_date=pd.to_datetime('2013-01-01'),
+            reduction_perc=28,
+            reduction_date=pd.to_datetime('2030-03-01'),
+            ):
+        
+        data_starting=data.loc[:,['Quarter',"Total (excluding LULUCF)"]]
+        data_starting=data_starting[data_starting["Quarter"]>=starting_date]
+        cumulative_offset=data_starting["Total (excluding LULUCF)"].iloc[:-1].sum()
+        
+        #Calculationg the number of quarters 
+        y0=data_starting["Total (excluding LULUCF)"].iloc[-1]
+        x0=data_starting["Quarter"].iloc[-1]
+        y1=self.emissions_yearly_2005*(1-0.01*reduction_perc)/4
+        m=(y1-y0)/((reduction_date-x0)/np.timedelta64(3, 'M'))
+        num_quarters=math.floor(-y0/m)
+        
+        return self.create_LRdata(data_starting,num_quarters,
+                                  cumulative_offset=cumulative_offset
+                                  )
     """
     Create linear reduction data, seed with end value of raw dataset
     
     """
     # @staticmethod
-    def create_LRdata(self,data,num_quarters):
+    def create_LRdata(self,data,num_quarters,cumulative_offset=0, is_append=False):
         
-        data_LRdata=pd.DataFrame(columns = data.columns)
         data_start=data.iloc[-1,:]
-        for i in range(num_quarters):    
-            data_LRdata=data_LRdata.append(data_start)
-            data_LRdata.iloc[-1,0]+=(i+1)*relativedelta(months=3)
-            data_LRdata.iloc[-1,1:]*= 1-(i+1)/num_quarters
+        if(num_quarters==0):
+            return data_start
         
-        data=data.append(data_LRdata)
-        data['Cumulative emissions']=data["Total (excluding LULUCF)"].cumsum()
-        return data
+        # data_LRdata=pd.DataFrame(columns = data.columns)
+        
+        # data_LRdata=data_LRdata.append(data_start)
+        
+        #Doing this optimisation makes fair share update much snappier
+        quarters=np.array([data_start['Quarter']+i*relativedelta(months=3) for i in range(num_quarters+1)])
+        total=np.array([data_start["Total (excluding LULUCF)"]*(1-i/num_quarters) for i in range(num_quarters+1)])
+        
+        # for i in range(num_quarters):    
+        #     data_LRdata=data_LRdata.append(data_start)
+        #     data_LRdata.iloc[-1,0]+=(i+1)*relativedelta(months=3)
+        #     data_LRdata.iloc[-1,1:]*= 1-(i+1)/num_quarters
+        
+        data_LRdata=pd.DataFrame({
+            'Quarter':quarters,
+            "Total (excluding LULUCF)":total
+            })
+        if(is_append):
+            data_LRdata=data.append(data_LRdata)
+        data_LRdata['Cumulative emissions']=data_LRdata["Total (excluding LULUCF)"].cumsum()+cumulative_offset
+        return data_LRdata
         
     """
     Create yearly rolling data from quarterly data 
