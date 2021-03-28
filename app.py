@@ -39,6 +39,8 @@ import plotly.graph_objects as go # or plotly.express as px
 from dash.dependencies import Input, Output
 
 app=dash.Dash(__name__)
+server = app.server
+
 app.layout = html.Div([
     html.Div([
         html.H1("Australia carbon emissions and budget - visualised"),
