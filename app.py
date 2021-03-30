@@ -44,33 +44,44 @@ server = app.server
 app.layout = html.Div([
     html.Div([
         html.H1("Australia carbon emissions and budget - visualised"),
-        html.H2("Introduction"),
-        html.H3("<https://www.industry.gov.au/data-and-publications/national-greenhouse-gas-inventory-quarterly-updates>")
-        ]),
+        html.A("Source code", href="https://github.com/asdftogerData/australia-netzeroemissions", target="_blank"),
+        ],
+        className="one-half column",
+        ),
     
     html.Div(
         [
             html.Div(
-                [html.P("Australia's historical emissions from 2001-Present. LULUCF is not included in any of the visualisations.")
+                [
+                    html.H2("Australia's historical emissions from 2001-Present. LULUCF is not included in any of the visualisations.")
                     ]
                 ),
             html.Div(
                 [dcc.RadioItems(
                     id='yearly-quarterly',
-                    options=[{'label': i, 'value': i} for i in ['Quarterly','Yearly']],
+                    options=[{'label': 'Quarterly', 'value': 'Quarterly'},
+                             {'label': 'Yearly Rolling Average', 'value': 'Yearly'},
+                             ],
                     value="Quarterly"            
                                 ),
                 ]
             ),
             html.Div(
-                [dcc.Graph(id="graph-historical-emissions",
-                          hoverData={'points': [{'x':str(data.Quarter.max())}]})],
-                style={'width': '49%', 'display': 'inline-block', 'padding': '0 20',"border":"2px black solid"},
-            ),
-            html.Div(
-                [dcc.Graph(id="graph-emissions-breakdown")],
-                style={'width': '49%', 'display': 'inline-block', 'padding': '0 20'},
-            ),
+                [
+                    html.Div(
+                        [dcc.Graph(id="graph-historical-emissions",
+                                  hoverData={'points': [{'x':str(data.Quarter.max())}]})],
+                        # style={'width': '49%', 'display': 'inline-block', 'padding': '0 20',"border":"2px black solid"},
+                        className="pretty_container seven columns"
+                    ),
+                    html.Div(
+                        [dcc.Graph(id="graph-emissions-breakdown")],
+                        className="pretty_container five columns"
+                        # style={'width': '49%', 'display': 'inline-block', 'padding': '0 20'},
+                    ),
+                    ],
+                className="row flex-display",
+            )
         ],
         # style={'display': 'inline-block'}, 
         # className="row flex-display",
@@ -97,7 +108,7 @@ app.layout = html.Div([
                             # 0.68:{'label': 'Equal cumulative per capital'},
                             # 0.52:{'label': 'Capability'},
                             # 1.19:{'label': 'Greenhouse development rights'},
-                            # 1.27:{'label': 'Constant emissions ratio'},
+                            1.27:{'label': 'Constant emissions ratio'},
                             }
                         ),
                       ],
@@ -106,14 +117,23 @@ app.layout = html.Div([
                  ]
                 
             ),
+            html.H2("Australia's fair share of carbon budget and emissions trajectories."),
             html.Div(
-                [dcc.Graph(id="graph-carbon-netzero")],
-                style={'width': '49%', 'display': 'inline-block', 'padding': '0 20'},
-            ),
-            html.Div(
-                [dcc.Graph(id="graph-carbon-budget")],
-                style={'width': '49%', 'display': 'inline-block', 'padding': '0 20'},
-            ),
+                [
+                    html.Div(
+                        [dcc.Graph(id="graph-carbon-netzero")],
+                        # style={'width': '49%', 'display': 'inline-block', 'padding': '0 20'},
+                        className="pretty_container seven columns"
+                    ),
+                    html.Div(
+                        [dcc.Graph(id="graph-carbon-budget")],
+                        className="pretty_container five columns"
+                        # style={'width': '49%', 'display': 'inline-block', 'padding': '0 20'},
+                    ),
+                    ],
+                className="row flex-display",
+                )
+            
         ],#style={'display': 'inline-block','width': '49%'}
     ),
     ],
@@ -150,10 +170,18 @@ def update_historical_emissions(hoverData,time_type):
     #Plot area line chart
     fig_area=px.area(dff.round(1),x="Quarter",y='Emissions',color='Sector')
     
-    fig_area.update_layout(title="Historical carbon emissions",
-                             xaxis_title="Year",
-                             yaxis_title="Emissions (MtCO<sub>2</sub>-e)",
-                             # transition_duration=500
+    fig_area.update_layout(
+        # title="Historical carbon emissions",
+        xaxis_title="Year",
+        yaxis_title="Emissions (MtCO<sub>2</sub>-e)",
+        legend=dict(
+            orientation="h",
+            y=-0.2,
+            # margin=5,
+            
+            # yanchor="bottom",
+        ),
+        # transition_duration=500
                              )
     
     #Plot pie chart
@@ -168,6 +196,9 @@ def update_historical_emissions(hoverData,time_type):
                      )
                  )
     fig.update_layout(
+        legend=dict(
+            orientation="h",
+            )
         # transition_duration=500,
         )
     fig.update_traces(textposition='inside', textinfo='percent+value')
@@ -183,17 +214,6 @@ def update_historical_emissions(hoverData,time_type):
     )
 def update_carbon_budget(share_perc):
     #Carbon budget figure
-    # if(budget_type in ['1.5C','2C']):
-    #     data_budget=my_emissions.create_carbon_budget_data_from_temp(
-    #         data,
-    #         target_type=budget_type,
-    #         )
-    # elif(budget_type=='28% reduction by 2030'):
-    #     data_budget=my_emissions.create_carbon_budget_data_from_reduction_target(
-    #         data,
-    #         )
-    
-    
     # starting_date=pd.to_datetime('2013-01-01')
     fig_netzero=go.Figure()
     fig_budget=go.Figure()
@@ -218,8 +238,8 @@ def update_carbon_budget(share_perc):
     d28R=my_emissions.create_carbon_budget_data_from_reduction_target(d2013)
     
     d_plot={
-        "Observed 2013-2020":d2013,
-        "28% reduction from 2005 levels by 2030":d28R,
+        "Observed":d2013,
+        "28% reduction by 2030":d28R, #from 2005 levels by 2030"
         '2C':d2C,
         '1.5C':d15C,
         }
@@ -246,9 +266,18 @@ def update_carbon_budget(share_perc):
     # fig_budget.update_layout(
     #     title="Carbon budget")
     fig_netzero.update_layout(
+        legend=dict(
+            orientation="h",
+            )
         # transition_duration=500
         )
     fig_budget.update_layout(
+        title="Cumulative emissions vs 1.5C and 2C Australian carbon budget",
+        yaxis_title="Cumulative emissions {}MtCO<sub>2</sub>-e",
+        legend=dict(
+            orientation="h",
+            )
+        
         # transition_duration=500
         )
 
