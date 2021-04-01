@@ -6,7 +6,7 @@ Created on Fri Mar 12 17:03:09 2021
 """
 #Preprocessing data
 import pandas as pd
-from nggiaustralia import emissions
+from nggiaustralia import emissions, DATETIME_2030
 
 my_emissions=emissions()
 #Wide Data
@@ -25,8 +25,30 @@ data_yearly_long=data_yearly_long.rename(columns={
     })
 d2013=data[data['Quarter']>=pd.to_datetime('2013-01-01')].loc[:,['Quarter',"Total (excluding LULUCF)"]]
 d2013['Cumulative emissions']=d2013["Total (excluding LULUCF)"].cumsum()
+
+#%% 
+
+# Creating color map for pie chart
+import plotly.express as px
+colors=px.colors.qualitative.Plotly
+emissions_cols=data.columns[1:]
+color_map = {emissions_cols[i]:colors[i] for i,key in enumerate(emissions_cols)}
+
+SLIDER_MARKS={
+0.33:{'label': 'World Population %'},
+0.97:{'label': 'CCA '},
+# 0.73:{'label': 'Equal per capital'},
+# 0.68:{'label': 'Equal cumulative per capital'},
+# 0.52:{'label': 'Capability'},
+# 1.19:{'label': 'Greenhouse development rights'},
+1.27:{'label': 'Constant emissions ratio'},
+}
+
 #%%
-d1=d2013.iloc[:2,:]
+# d15C=my_emissions.create_carbon_budget_data_from_temp(d2013,target_type="1.5C",share_perc=0.97)
+# ddd=d15C[d15C['Quarter']==DATETIME_2030]['Cumulative emissions'].iloc[-1]
+
+# e=round(ddd)
 
 #%%
 import json
@@ -40,6 +62,7 @@ from dash.dependencies import Input, Output
 
 app=dash.Dash(__name__)
 server = app.server
+
 
 app.layout = html.Div([
     html.Div([
@@ -88,56 +111,57 @@ app.layout = html.Div([
     ),        
     html.Div(
         [
-            html.Div(
-                [
+            html.H2("Australia's fair share of carbon budget and emissions trajectories."),
+            # html.Div(
+            #     [
                     # dcc.Input(id='fair-share-input'),
                   # html.P("Fair share budget %"),
-                  html.Div(id='fair-share-container',
-                           # style={'width': '49%','display': 'inline-block'}
-                           ),
-                  html.Div([dcc.Slider(
-                      id='fair-share-slider',
-                        min=0.33,
-                        max=1.27,
-                        value=0.97,
-                        step=0.01,
-                        marks={
-                            0.33:{'label': 'World Population %'},
-                            0.97:{'label': 'CCA '},
-                            # 0.73:{'label': 'Equal per capital'},
-                            # 0.68:{'label': 'Equal cumulative per capital'},
-                            # 0.52:{'label': 'Capability'},
-                            # 1.19:{'label': 'Greenhouse development rights'},
-                            1.27:{'label': 'Constant emissions ratio'},
-                            }
-                        ),
-                      ],
-                      style={'width': '49%','display': 'inline-block'}
-                      )
-                 ]
+             html.Div(
+                 id='fair-share-container',
+                  # className="pretty_container one columns"
+                      # style={'width': '49%','display': 'inline-block'}
+                      ),
+             html.Div([
+             dcc.Slider(
+                 id='fair-share-slider',
+                   min=0.33,
+                   max=1.27,
+                   value=0.97,
+                   step=0.01,
+                   marks=SLIDER_MARKS,
+                    # className='dcc_control'
+                    # className="pretty_container five columns",
+                   # className='dcc_control'
+                    
+                   ),
+                 ], 
+                 style={'width': '50%', 'align': 'center'},
+                 ),
+                 
+            # ],
+                      
+                # className= "row flex-display",
+                # className= "pretty_container five columns",
                 
-            ),
-            html.H2("Australia's fair share of carbon budget and emissions trajectories."),
+            # ),
             html.Div(
                 [
                     html.Div(
                         [dcc.Graph(id="graph-carbon-netzero")],
-                        # style={'width': '49%', 'display': 'inline-block', 'padding': '0 20'},
                         className="pretty_container seven columns"
                     ),
                     html.Div(
                         [dcc.Graph(id="graph-carbon-budget")],
                         className="pretty_container five columns"
-                        # style={'width': '49%', 'display': 'inline-block', 'padding': '0 20'},
                     ),
                     ],
                 className="row flex-display",
                 )
             
-        ],#style={'display': 'inline-block','width': '49%'}
+        ],
     ),
     ],
-    # style={"display": "flex", "flex-direction": "column"}
+    
 )
 
 
@@ -168,18 +192,18 @@ def update_historical_emissions(hoverData,time_type):
     # })
     
     #Plot area line chart
-    fig_area=px.area(dff.round(1),x="Quarter",y='Emissions',color='Sector')
+    fig_area=px.area(dff.round(1),x="Quarter",y='Emissions',color='Sector',
+                     # color_discrete_map=color_discrete_map
+                     )
     
     fig_area.update_layout(
-        # title="Historical carbon emissions",
+        title="Historical carbon emissions",
+        title_x=0.5,
         xaxis_title="Year",
         yaxis_title="Emissions (MtCO<sub>2</sub>-e)",
         legend=dict(
             orientation="h",
             y=-0.2,
-            # margin=5,
-            
-            # yanchor="bottom",
         ),
         # transition_duration=500
                              )
@@ -188,14 +212,15 @@ def update_historical_emissions(hoverData,time_type):
     dff=dff[dff.Quarter==quarter]
     dff_sum=dff['Emissions'].sum().round(1)
     fig = px.pie(dff.round(1),
-                  values="Emissions",names="Sector",
-                 title="{}-{}: {}MtCO<sub>2</sub>-e".format(
-                     quarter_dt.strftime('%B'),
-                     quarter_dt.year,
-                     dff_sum,
-                     )
+                 values="Emissions",
+                 names="Sector",
+                 color="Sector",
+                 color_discrete_map=color_map,
                  )
+    
     fig.update_layout(
+        title="{}-{}: {}MtCO<sub>2</sub>-e".format(quarter_dt.strftime('%B'),quarter_dt.year,dff_sum),
+        title_x=0.5,
         legend=dict(
             orientation="h",
             )
@@ -246,38 +271,62 @@ def update_carbon_budget(share_perc):
     
     for name,data_plot in d_plot.items():
         if(len(data_plot)>2):
-            fig_netzero.add_trace(
-                go.Line(
+            line_netzero=go.Scatter(
                     x=data_plot['Quarter'],
                     y=data_plot["Total (excluding LULUCF)"],
                     name=name,
                     # mode='lines+markers',
+                    line=dict(dash='dashdot' if name!="Observed" else 'solid')
                     
                     )
-            )
-            fig_budget.add_trace(
-                go.Line(
+            line_budget=go.Scatter(
                     x=data_plot['Quarter'],
                     y=data_plot["Cumulative emissions"],
                     name=name,
                     # mode='lines+markers',
+                    line=dict(dash='dashdot' if name!="Observed" else 'solid'),
                     )
+            # line_netzero.update()
+            fig_netzero.add_trace(
+                line_netzero
+            )
+            
+            if(name!="Observed" and (DATETIME_2030 in data_plot['Quarter'].values)):
+                fig_netzero.add_annotation(
+                    x=DATETIME_2030,
+                    y=data_plot[data_plot['Quarter']==DATETIME_2030]['Total (excluding LULUCF)'].iloc[-1],
+                    showarrow=True,
+                    arrowhead=1,
+                    
+                    text="{}% reduction by 2030".format(emissions.get_reduction_percentage(data_plot)),
+                    align='right',
+                    ax=100, #I dont have a good way of setting this other than some flat value
+                    
+                    )
+            fig_budget.add_trace(
+                line_budget
             )
     # fig_budget.update_layout(
     #     title="Carbon budget")
+    
+    
+    
+    
     fig_netzero.update_layout(
+        title="Net zero emissions trajectories",
+        title_x=0.5,
         legend=dict(
             orientation="h",
             )
         # transition_duration=500
         )
     fig_budget.update_layout(
-        title="Cumulative emissions vs 1.5C and 2C Australian carbon budget",
-        yaxis_title="Cumulative emissions {}MtCO<sub>2</sub>-e",
+        title="Cumulative emissions vs 1.5C and 2C carbon budget",
+        title_x=0.5,
+        yaxis_title="Cumulative emissions (MtCO<sub>2</sub>-e)",
         legend=dict(
             orientation="h",
             )
-        
         # transition_duration=500
         )
 

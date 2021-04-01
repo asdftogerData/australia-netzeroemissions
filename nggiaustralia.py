@@ -12,6 +12,7 @@ import datetime
 import math
 from dateutil.relativedelta import relativedelta
 import numpy as np
+DATETIME_2030=pd.to_datetime("2030-03-01")
 
 class emissions:
     '''
@@ -27,10 +28,8 @@ class emissions:
     '''
     global_budget_2013to2050_15C=800000
     global_budget_2013to2050_2C=1072165
-    
-    # carbon_budget_15C=7760
-    # carbon_budget_2C=10400
     emissions_yearly_2005=535.27
+    
     XLS_NAME="nggi-quarterly-update-september-2020-data-sources.xlsx"
     DL_NAME="https://www.industry.gov.au/sites/default/files/2021-02/nggi-quarterly-update-september-2020-data-sources.xlsx"
     SHEET_NAME="Data Table 1A"
@@ -106,6 +105,8 @@ class emissions:
         target_type="1.5C",
         share_perc=0.97,
         starting_date=pd.to_datetime('2013-01-01'),
+        # is_get_reduction_date=False,
+        # reduction_date=pd.to_datetime('2030-03-01')
         ):
         data_starting=data.loc[:,['Quarter',"Total (excluding LULUCF)"]]
         data_starting=data_starting[data_starting["Quarter"]>=starting_date]
@@ -125,10 +126,16 @@ class emissions:
         emissions_start=data_starting["Total (excluding LULUCF)"].iloc[-1]
         #n=2c/y0 for linear reduction
         num_quarters=math.floor(2*carbon_budget/emissions_start)
-        
-        return self.create_LRdata(data_starting,num_quarters,
+        LR_data=self.create_LRdata(data_starting,num_quarters,
                                   cumulative_offset=cumulative_offset,
                                   )
+        
+        # if(is_get_reduction_date):
+        #     emissions_=LR_data[LR_data==reduction_date]['Total (excluding LULUCF)']
+        #     reduction_perc=math.floor(1-emissions_/emissions_start)
+        #     return LR_data, reduction_perc
+        # else:
+        return LR_data
     """
     Create a carbon budget from reduction targets
     """
@@ -137,7 +144,9 @@ class emissions:
             data,
             starting_date=pd.to_datetime('2013-01-01'),
             reduction_perc=28,
-            reduction_date=pd.to_datetime('2030-03-01'),
+            reduction_date=DATETIME_2030,
+            # is_get_reduction_date=False,
+        
             ):
         
         data_starting=data.loc[:,['Quarter',"Total (excluding LULUCF)"]]
@@ -151,9 +160,24 @@ class emissions:
         m=(y1-y0)/((reduction_date-x0)/np.timedelta64(3, 'M'))
         num_quarters=math.floor(-y0/m)
         
-        return self.create_LRdata(data_starting,num_quarters,
+        LR_data=self.create_LRdata(data_starting,num_quarters,
                                   cumulative_offset=cumulative_offset
                                   )
+        # if(is_get_reduction_date):
+        #     return LR_data,reduction_perc
+        # else:
+        return LR_data
+        
+    '''
+    Get the reduction percentage 
+    
+    '''
+    def get_reduction_percentage(data,
+                                 emissions_start=emissions_yearly_2005,
+                                 reduction_date=DATETIME_2030):
+        emissions_date=data[data['Quarter']==reduction_date]['Total (excluding LULUCF)'].iloc[-1]
+        return round(100*(1-4*emissions_date/emissions_start))
+        
     """
     Create linear reduction data, seed with end value of raw dataset
     
